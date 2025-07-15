@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <title>مساعد صوتي</title>
+    <style>
+        body { font-family: Arial; text-align: center; padding: 20px; }
+        #recordBtn, #stopBtn, #submitBtn { margin: 10px; padding: 10px 20px; font-size: 16px; }
+        #transcript { margin-top: 20px; font-size: 18px; }
+    </style>
+</head>
+<body>
+    <h1>المساعد الصوتي الرجاء تسجيل ايضا اسمك ورقم هاتفك </h1>
+    <button id="recordBtn">بدء التسجيل</button>
+    <button id="stopBtn" disabled>إيقاف التسجيل</button>
+    <p id="transcript">النص المحول سيظهر هنا...</p>
+    <audio id="audioPreview" controls style="display:none;"></audio>
+    <button id="submitBtn" disabled>إرسال</button>
+
+    <script>
+        let mediaRecorder, audioChunks = [];
+        let finalTranscript = '';
+        let audioBlob;
+
+        const recordBtn = document.getElementById("recordBtn");
+        const stopBtn = document.getElementById("stopBtn");
+        const submitBtn = document.getElementById("submitBtn");
+        const transcriptEl = document.getElementById("transcript");
+        const audioPreview = document.getElementById("audioPreview");
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'ar-SA';
+        recognition.continuous = true;
+
+        recordBtn.onclick = async () => {
+            finalTranscript = '';
+            transcriptEl.textContent = '... جاري التسجيل والتحويل';
+            audioChunks = [];
+
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.start();
+
+            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+            mediaRecorder.onstop = () => {
+                audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                audioPreview.src = URL.createObjectURL(audioBlob);
+                audioPreview.style.display = 'block';
+                submitBtn.disabled = false;
+            };
+
+            recognition.start();
+            recognition.onresult = event => {
+                finalTranscript = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    finalTranscript += event.results[i][0].transcript;
+                }
+                transcriptEl.textContent = finalTranscript;
+            };
+
+            recordBtn.disabled = true;
+            stopBtn.disabled = false;
+        };
+
+        stopBtn.onclick = () => {
+            mediaRecorder.stop();
+            recognition.stop();
+            stopBtn.disabled = true;
+            recordBtn.disabled = false;
+        };
+
+        submitBtn.onclick = async () => {
+            const formData = new FormData();
+            formData.append("audio", audioBlob, "recording.webm");
+            formData.append("transcript", finalTranscript);
+
+            const res = await fetch("save_voice.php", {
+                method: "POST",
+                body: formData
+            });
+
+            const result = await res.text();
+            alert(result);
+            location.reload();
+        };
+    </script>
+</body>
+</html>
